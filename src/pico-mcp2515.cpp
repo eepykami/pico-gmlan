@@ -8,8 +8,19 @@ struct can_frame rx;
 int main() {
     stdio_init_all();
 
-    //Initialize interface
-    can0.reset();
+    // Init MCP2515
+    printf("Initialising MCP2515 ... ");
+
+    int initStatus = can0.reset(); // Initialising SPI
+    if(initStatus == MCP2515::ERROR_OK) {
+        printf("success!\n");
+    } else {
+        printf("fail! Error %d.\n", initStatus);
+        while(1) {
+            tight_loop_contents();
+        }
+    }
+
     can0.setBitrate(CAN_1000KBPS, MCP_16MHZ);
     can0.setNormalMode();
 
