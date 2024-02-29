@@ -8,6 +8,13 @@ struct can_frame rx;
 int main() {
     stdio_init_all();
 
+    // Wait for serial connection before continuing - useful for Windows, could live without this on Linux.
+    while (!stdio_usb_connected()) {
+        tight_loop_contents();
+    }
+
+    printf("GMLAN CAN test.\n");
+
     // Init MCP2515
     printf("Initialising MCP2515 ... ");
 
