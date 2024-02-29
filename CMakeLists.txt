@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD 17)
 include(pico_sdk_import.cmake)
 
 project(pico-mcp2515 C CXX ASM)
+set(PICO_BOARD adafruit_feather_rp2040)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
