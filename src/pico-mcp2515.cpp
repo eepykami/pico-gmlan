@@ -28,15 +28,16 @@ int main() {
         }
     }
 
-    can0.setBitrate(CAN_1000KBPS, MCP_16MHZ);
+    can0.setBitrate(CAN_33KBPS, MCP_16MHZ); // GMLAN low speed uses 33,3kbps baudrate, we set this here.
     can0.setNormalMode();
 
-    //Listen loop
+    // Listen loop
+    printf("Listening for GMLAN messages ...\n");
     while(true) {
         if(can0.readMessage(&rx) == MCP2515::ERROR_OK) {
             printf("New frame from ID: %10x\n", rx.can_id);
         }
     }
-
+    
     return 0;
 }
