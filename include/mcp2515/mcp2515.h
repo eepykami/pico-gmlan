@@ -466,11 +466,12 @@ class MCP2515 {
     
     public:
         MCP2515(
-            spi_inst_t* CHANNEL = spi0,
-            uint8_t CS_PIN = PICO_DEFAULT_SPI_CSN_PIN,
-            uint8_t TX_PIN = PICO_DEFAULT_SPI_TX_PIN,
-            uint8_t RX_PIN = PICO_DEFAULT_SPI_RX_PIN,
-            uint8_t SCK_PIN = PICO_DEFAULT_SPI_SCK_PIN,
+            // Pins to MCP2515 defined here. Pins for Adafruit RP2040 CAN Bus Feather from schematic.
+            spi_inst_t* CHANNEL = spi1,
+            uint8_t CS_PIN = 19,
+            uint8_t TX_PIN = 8, // TX = MISO
+            uint8_t RX_PIN = 15, // RX = MOSI
+            uint8_t SCK_PIN = 14,
             uint32_t _SPI_CLOCK = DEFAULT_SPI_CLOCK
         );
         ERROR reset(void);
