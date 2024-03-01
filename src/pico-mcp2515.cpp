@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include "pico/stdlib.h"
 #include "mcp2515/mcp2515.h"
 
@@ -16,16 +17,28 @@ char input_character;
 MCP2515 can0;
 struct can_frame rx;
 
-// CAN message to be sent
-// TODO: we'll want this to be updated from serial
-can_frame tx = {
-    .can_id = 0x500,
+// CAN message to wake up GMLAN before transmitting data
+can_frame gmlanInit = {
+    .can_id = 0x632,
     .can_dlc = 8, // Data length (bytes)
-    .data = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }
+    .data = { 0x00, 0x48, 0x50, 0x00, 0x00, 0x00, 0x00, 0x00 }
 };
 
-void setupCAN() {
-    // Init MCP2515
+// CAN message to be sent (this should do a needle sweep on the Corsa-D IPC)
+// TODO: we'll want this to be updated from serial
+can_frame needleSweep = {
+    .can_id = 0x170,
+    .can_dlc = 8, // Data length (bytes)
+    .data = { 0x00, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x1E }
+};
+
+// Prototypes
+void setupCAN();
+void processInboundSerialMessage();
+void processInboundCanMessage();
+void sendCanFrame(can_frame frame);
+
+void setupCAN() {  // Init MCP2515
     printf("Initialising MCP2515 ... ");
 
     MCP2515::ERROR initStatus = can0.reset(); // Initialising SPI
@@ -40,11 +53,11 @@ void setupCAN() {
     }
 
     can0.setBitrate(CAN_33KBPS, MCP_16MHZ); // GMLAN low speed uses 33,3kbps baudrate, we set this here.
-    //can0.setNormalMode();
-    can0.setLoopbackMode();
+    can0.setNormalMode();
+    //can0.setLoopbackMode();
 }
 
-void processInboundSerialMessages() {
+void processInboundSerialMessage() {
     input_character = getchar_timeout_us(0);
     while (input_character != ENDSTDIN)
     {   
@@ -55,10 +68,40 @@ void processInboundSerialMessages() {
             // do something with message in string buffer here. for now we printf it
             // TODO: plan is for a can packet to come in via serial. decode it from the string buffer, and send it via CAN.
             printf("New string from serial: %s\n", string_buffer);
+            if(strncmp(string_buffer, "init", 4) == 0) {
+                printf("Sending GMLAN initialisation packet ... ");
+                sendCanFrame(gmlanInit);
+            } else if(strncmp(string_buffer, "sweep", 5) == 0) {
+                printf("Sending needle sweep packet ... ");
+                sendCanFrame(needleSweep);
+            }
             string_buffer_offset = 0;
             break;
         }
         input_character = getchar_timeout_us(0);
+    }
+}
+
+void processInboundCanMessage() {
+    if(can0.readMessage(&rx) == MCP2515::ERROR_OK) { // Checking for incoming CAN message
+        printf("Received new frame from ID: %10x\n", rx.can_id);
+        printf("Data: "); // Printing received data in hex
+        for(int i = 0; i < rx.can_dlc; i++) {
+            if(! (i % 16) && i) {
+                printf("\n");
+            }
+            printf("0x%02X ", rx.data[i]);
+        }
+        printf("\n");
+    }
+}
+
+void sendCanFrame(can_frame frame) {
+    MCP2515::ERROR sendStatus = can0.sendMessage(&frame);
+    if(sendStatus == MCP2515::ERROR_OK){
+        printf("success!\n");
+    } else {
+        printf("fail! Error %d.\n", sendStatus);
     }
 }
 
@@ -72,33 +115,9 @@ int main() {
 
     setupCAN();
 
-    printf("GMLAN CAN test.\n");
-
-    unsigned long previousMainLoopTime = to_ms_since_boot(get_absolute_time());
-
-    // Listen loop
     while(true) {
-        unsigned long currentMainLoopTime = to_ms_since_boot(get_absolute_time());
-
-        processInboundSerialMessages(); // Checking for incoming serial message
-
-        if(can0.readMessage(&rx) == MCP2515::ERROR_OK) { // Checking for incoming CAN message
-            printf("New frame from ID: %10x\n", rx.can_id);
-        }
-
-        if(currentMainLoopTime - previousMainLoopTime > 5000) { // send CAN message every 1 second
-            printf("Sending CAN message ... ");
-
-            MCP2515::ERROR sendStatus = can0.sendMessage(MCP2515::TXB0, &tx);
-            if(sendStatus == MCP2515::ERROR_OK){
-                printf("success!\n");
-            } else {
-                printf("fail! Error %d.\n", sendStatus);
-            }
-
-            previousMainLoopTime = currentMainLoopTime;
-        }
+        processInboundSerialMessage(); // Checking for incoming serial message
+        processInboundCanMessage();
     }
-    
     return 0;
 }
