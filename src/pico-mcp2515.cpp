@@ -16,6 +16,34 @@ char input_character;
 MCP2515 can0;
 struct can_frame rx;
 
+// CAN message to be sent
+// TODO: we'll want this to be updated from serial
+can_frame tx = {
+    .can_id = 0x500,
+    .can_dlc = 8, // Data length (bytes)
+    .data = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }
+};
+
+void setupCAN() {
+    // Init MCP2515
+    printf("Initialising MCP2515 ... ");
+
+    MCP2515::ERROR initStatus = can0.reset(); // Initialising SPI
+    if(initStatus == MCP2515::ERROR_OK) {
+        printf("success!\n");
+    } else {
+        printf("fail! Error %d.\n", initStatus);
+        while(1) {
+            // TODO: Blink LED on error?
+            tight_loop_contents();
+        }
+    }
+
+    can0.setBitrate(CAN_33KBPS, MCP_16MHZ); // GMLAN low speed uses 33,3kbps baudrate, we set this here.
+    //can0.setNormalMode();
+    can0.setLoopbackMode();
+}
+
 void processInboundSerialMessages() {
     input_character = getchar_timeout_us(0);
     while (input_character != ENDSTDIN)
@@ -26,7 +54,7 @@ void processInboundSerialMessages() {
             string_buffer[string_buffer_offset] = 0;
             // do something with message in string buffer here. for now we printf it
             // TODO: plan is for a can packet to come in via serial. decode it from the string buffer, and send it via CAN.
-            printf("%s\n", string_buffer);
+            printf("New string from serial: %s\n", string_buffer);
             string_buffer_offset = 0;
             break;
         }
@@ -42,30 +70,33 @@ int main() {
         tight_loop_contents();
     }
 
+    setupCAN();
+
     printf("GMLAN CAN test.\n");
 
-    // Init MCP2515
-    printf("Initialising MCP2515 ... ");
-
-    int initStatus = can0.reset(); // Initialising SPI
-    if(initStatus == MCP2515::ERROR_OK) {
-        printf("success!\n");
-    } else {
-        printf("fail! Error %d.\n", initStatus);
-        while(1) {
-            tight_loop_contents();
-        }
-    }
-
-    can0.setBitrate(CAN_33KBPS, MCP_16MHZ); // GMLAN low speed uses 33,3kbps baudrate, we set this here.
-    can0.setNormalMode();
+    unsigned long previousMainLoopTime = to_ms_since_boot(get_absolute_time());
 
     // Listen loop
-    printf("Listening for GMLAN messages ...\n");
     while(true) {
-        processInboundSerialMessages();
-        if(can0.readMessage(&rx) == MCP2515::ERROR_OK) {
+        unsigned long currentMainLoopTime = to_ms_since_boot(get_absolute_time());
+
+        processInboundSerialMessages(); // Checking for incoming serial message
+
+        if(can0.readMessage(&rx) == MCP2515::ERROR_OK) { // Checking for incoming CAN message
             printf("New frame from ID: %10x\n", rx.can_id);
+        }
+
+        if(currentMainLoopTime - previousMainLoopTime > 5000) { // send CAN message every 1 second
+            printf("Sending CAN message ... ");
+
+            MCP2515::ERROR sendStatus = can0.sendMessage(MCP2515::TXB0, &tx);
+            if(sendStatus == MCP2515::ERROR_OK){
+                printf("success!\n");
+            } else {
+                printf("fail! Error %d.\n", sendStatus);
+            }
+
+            previousMainLoopTime = currentMainLoopTime;
         }
     }
     
